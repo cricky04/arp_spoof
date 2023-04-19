@@ -1,6 +1,6 @@
 LDLIBS=-lpcap
 
-all: send-arp
+all: arp-spoof
 
 arphdr.o: mac.h ip.h arphdr.h arphdr.cpp
 
